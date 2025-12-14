@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { AlertCircle, Candy, LogOut, Plus, Search, Edit, Trash2, User, X } from 'lucide-react';
 import { login as authLogin, register as authRegister, logout as authLogout, getCurrentUser } from './services/authService';
-import { getSweets as fetchSweets, createSweet as createSweetSvc, updateSweet as updateSweetSvc, deleteSweet as deleteSweetSvc } from './services/sweetService';
+import { getSweets as fetchSweets, createSweet as createSweetSvc, updateSweet as updateSweetSvc, deleteSweet as deleteSweetSvc, purchaseSweet as purchaseSweetSvc, restockSweet as restockSweetSvc } from './services/sweetService';
 import SweetsExample from './components/SweetsExample';
 
 // ============================================================================
@@ -559,6 +559,7 @@ const SweetListPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [selectedSweet, setSelectedSweet] = useState(null);
+  const [restockAmounts, setRestockAmounts] = useState({});
 
   const loadSweets = async () => {
       try {
@@ -600,6 +601,28 @@ const SweetListPage = () => {
       setSuccess('Sweet deleted successfully!');
       loadSweets();
       setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handlePurchase = async (id) => {
+    try {
+      await purchaseSweetSvc(id);
+      await loadSweets();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRestock = async (id) => {
+    const amount = parseInt(restockAmounts[id] || 1, 10) || 1;
+    try {
+      await restockSweetSvc(id, amount);
+      setRestockAmounts(prev => ({ ...prev, [id]: '' }));
+      await loadSweets();
+      setSuccess('Sweet restocked successfully!');
+      setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       setError(err.message);
     }
@@ -686,7 +709,14 @@ const SweetListPage = () => {
 }</span>
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={() => handlePurchase(sweet.id)}
+                      disabled={sweet.quantity === 0}
+                      className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition disabled:opacity-50"
+                    >
+                      Purchase
+                    </button>
                     <button
                       onClick={() => handleEdit(sweet)}
                       className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
@@ -695,13 +725,29 @@ const SweetListPage = () => {
                       Edit
                     </button>
                     {user?.is_admin && (
-                      <button
-                        onClick={() => handleDelete(sweet.id)}
-                        className="flex items-center justify-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={restockAmounts[sweet.id] ?? ''}
+                          onChange={(e) => setRestockAmounts(prev => ({ ...prev, [sweet.id]: e.target.value }))}
+                          placeholder="amt"
+                          className="w-16 px-2 py-1 border rounded"
+                        />
+                        <button
+                          onClick={() => handleRestock(sweet.id)}
+                          className="bg-yellow-400 text-purple-900 px-3 py-1 rounded"
+                        >
+                          Restock
+                        </button>
+                        <button
+                          onClick={() => handleDelete(sweet.id)}
+                          className="flex items-center justify-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

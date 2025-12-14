@@ -24,3 +24,13 @@ export async function deleteSweet(id) {
   const res = await api.delete(`/api/sweets/${id}`);
   return res.data;
 }
+
+export async function purchaseSweet(id) {
+  const res = await api.post(`/api/sweets/${id}/purchase`);
+  return res.data;
+}
+
+export async function restockSweet(id, amount = 1) {
+  const res = await api.post(`/api/sweets/${id}/restock?quantity=${amount}`);
+  return res.data;
+}
