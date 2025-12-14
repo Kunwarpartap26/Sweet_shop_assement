@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.models.user import User
 
 client = TestClient(app)
 
@@ -100,7 +101,7 @@ def test_admin_can_delete_sweet():
 
     # Manually promote to admin (test shortcut)
     from app.database import SessionLocal
-    from app.models.user import User
+    
 
     db = SessionLocal()
     admin = db.query(User).filter(User.email == "admin@example.com").first()

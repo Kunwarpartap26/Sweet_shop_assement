@@ -1,16 +1,22 @@
-from fastapi import HTTPException, Depends, status
-from app.auth.dependencies import get_current_user
-from app.models.user import User
-from fastapi import APIRouter, Depends, status
+from typing import TYPE_CHECKING
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.database import get_db
+from app.auth.dependencies import get_current_user
 from app.models.sweet import Sweet
+
+if TYPE_CHECKING:
+    from app.models.user import User
+
 
 router = APIRouter(
     prefix="/api/sweets",
-    tags=["Sweets"]
+    tags=["Sweets"],
 )
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_sweet(sweet: dict, db: Session = Depends(get_db)):
@@ -18,7 +24,7 @@ def create_sweet(sweet: dict, db: Session = Depends(get_db)):
         name=sweet["name"],
         category=sweet["category"],
         price=sweet["price"],
-        quantity=sweet["quantity"]
+        quantity=sweet["quantity"],
     )
 
     db.add(new_sweet)
@@ -26,29 +32,32 @@ def create_sweet(sweet: dict, db: Session = Depends(get_db)):
     db.refresh(new_sweet)
 
     return new_sweet
+
+
 @router.get("")
 def get_sweets(db: Session = Depends(get_db)):
-    sweets = db.query(Sweet).all()
-    return sweets
-from sqlalchemy import or_
+    return db.query(Sweet).all()
+
 
 @router.get("/search")
 def search_sweets(query: str, db: Session = Depends(get_db)):
-    sweets = db.query(Sweet).filter(
-        or_(
-            Sweet.name.ilike(f"%{query}%"),
-            Sweet.category.ilike(f"%{query}%")
+    return (
+        db.query(Sweet)
+        .filter(
+            or_(
+                Sweet.name.ilike(f"%{query}%"),
+                Sweet.category.ilike(f"%{query}%"),
+            )
         )
-    ).all()
+        .all()
+    )
 
-    return sweets
-from fastapi import HTTPException
 
 @router.put("/{sweet_id}")
 def update_sweet(
     sweet_id: int,
     updated_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     sweet = db.query(Sweet).filter(Sweet.id == sweet_id).first()
 
@@ -64,14 +73,20 @@ def update_sweet(
     db.refresh(sweet)
 
     return sweet
+
+
 @router.delete("/{sweet_id}", status_code=status.HTTP_200_OK)
 def delete_sweet(
     sweet_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 🔒 Admin check
-    if not current_user.is_admin:
+    from app.models.user import User
+
+    
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+
+    if not db_user or not db_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
@@ -89,3 +104,67 @@ def delete_sweet(
     db.commit()
 
     return {"message": "Sweet deleted successfully"}
+@router.post("/{sweet_id}/purchase")
+def purchase_sweet(
+    sweet_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    sweet = db.query(Sweet).filter(Sweet.id == sweet_id).first()
+
+    if not sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+
+    if sweet.quantity <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Sweet is out of stock",
+        )
+
+    sweet.quantity -= 1
+    db.commit()
+    db.refresh(sweet)
+
+    return {
+        "message": "Sweet purchased successfully",
+        "remaining_quantity": sweet.quantity,
+    }
+
+
+@router.post("/{sweet_id}/restock")
+def restock_sweet(
+    sweet_id: int,
+    quantity: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from app.models.user import User
+
+    
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+
+    if not db_user or not db_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    sweet = db.query(Sweet).filter(Sweet.id == sweet_id).first()
+
+    if not sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+
+    if quantity <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Restock quantity must be greater than zero",
+        )
+
+    sweet.quantity += quantity
+    db.commit()
+    db.refresh(sweet)
+
+    return {
+        "message": "Sweet restocked successfully",
+        "new_quantity": sweet.quantity,
+    }
